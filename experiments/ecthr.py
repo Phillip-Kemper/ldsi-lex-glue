@@ -35,9 +35,10 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-from models.hierbert import HierarchicalBert
-from models.deberta import DebertaForSequenceClassification
-
+#from models.hierbert import HierarchicalBert
+#from models.deberta import DebertaForSequenceClassification
+from hierbert import HierarchicalBert
+from deberta import DebertaForSequenceClassification
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.9.0")
