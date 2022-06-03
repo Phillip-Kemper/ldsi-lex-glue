@@ -316,6 +316,7 @@ def main():
         else:
             raise NotImplementedError(f"{config.model_type} is no supported yet!")
 
+
     # Preprocessing the datasets
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -434,6 +435,11 @@ def main():
         data_collator = None
 
     # Initialize our Trainer
+    for param in model.bert.parameters():
+        param.requires_grad = False
+
+    print("maybe worked")
+
     trainer = MultilabelTrainer(
         model=model,
         args=training_args,
