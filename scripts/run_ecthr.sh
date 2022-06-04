@@ -1,6 +1,6 @@
 GPU_NUMBER=0
-MODEL_NAME='bert-base-uncased'
-LOWER_CASE='True'
+MODEL_NAME='distilbert-base-uncased'
+LOWER_CASE='False'
 BATCH_SIZE=2
 ACCUMULATION_STEPS=4
 TASK='ecthr_a'

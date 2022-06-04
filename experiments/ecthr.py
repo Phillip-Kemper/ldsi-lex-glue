@@ -11,6 +11,7 @@ from typing import Optional
 
 import datasets
 import numpy as np
+import torch
 from datasets import load_dataset
 from sklearn.metrics import f1_score
 from trainer import MultilabelTrainer
@@ -35,8 +36,8 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-#from models.hierbert import HierarchicalBert
-#from models.deberta import DebertaForSequenceClassification
+# from models.hierbert import HierarchicalBert
+# from models.deberta import DebertaForSequenceClassification
 from hierbert import HierarchicalBert
 from deberta import DebertaForSequenceClassification
 
@@ -62,7 +63,7 @@ class DataTrainingArguments:
         default=4096,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+                    "than this will be truncated, sequences shorter will be padded."
         },
     )
     max_segments: Optional[int] = field(
@@ -86,28 +87,28 @@ class DataTrainingArguments:
         default=True,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+                    "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     task: Optional[str] = field(
@@ -158,7 +159,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+                    "with private models)."
         },
     )
 
@@ -234,13 +235,16 @@ def main():
     # download the dataset.
     # Downloading and loading eurlex dataset from the hub.
     if training_args.do_train:
-        train_dataset = load_dataset("lex_glue", name=data_args.task, split="train", data_dir='data', cache_dir=model_args.cache_dir)
+        train_dataset = load_dataset("lex_glue", name=data_args.task, split="train", data_dir='data',
+                                     cache_dir=model_args.cache_dir)
 
     if training_args.do_eval:
-        eval_dataset = load_dataset("lex_glue", name=data_args.task, split="validation", data_dir='data', cache_dir=model_args.cache_dir)
+        eval_dataset = load_dataset("lex_glue", name=data_args.task, split="validation", data_dir='data',
+                                    cache_dir=model_args.cache_dir)
 
     if training_args.do_predict:
-        predict_dataset = load_dataset("lex_glue", name=data_args.task, split="test", data_dir='data', cache_dir=model_args.cache_dir)
+        predict_dataset = load_dataset("lex_glue", name=data_args.task, split="test", data_dir='data',
+                                       cache_dir=model_args.cache_dir)
 
     # Labels
     label_list = list(range(10))
@@ -316,7 +320,6 @@ def main():
         else:
             raise NotImplementedError(f"{config.model_type} is no supported yet!")
 
-
     # Preprocessing the datasets
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -335,9 +338,9 @@ def main():
                     case_encodings = tokenizer(case[:data_args.max_segments], padding=padding,
                                                max_length=data_args.max_seg_length, truncation=True)
                     batch['input_ids'].append(case_encodings['input_ids'] + case_template * (
-                                data_args.max_segments - len(case_encodings['input_ids'])))
+                            data_args.max_segments - len(case_encodings['input_ids'])))
                     batch['attention_mask'].append(case_encodings['attention_mask'] + case_template * (
-                                data_args.max_segments - len(case_encodings['attention_mask'])))
+                            data_args.max_segments - len(case_encodings['attention_mask'])))
             else:
                 batch = {'input_ids': [], 'attention_mask': [], 'token_type_ids': []}
                 for case in examples['text']:
@@ -435,77 +438,82 @@ def main():
         data_collator = None
 
     # Initialize our Trainer
-    for param in model.bert.parameters():
-        param.requires_grad = False
+
+    # Trying To Freeze BERT Parameters
+#    for param in model.bert.parameters():
+#        param.requires_grad = False
+
 
     print("maybe worked")
 
-    trainer = MultilabelTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
-        compute_metrics=compute_metrics,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
-    )
 
-    # Training
-    if training_args.do_train:
-        checkpoint = None
-        if training_args.resume_from_checkpoint is not None:
-            checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        metrics = train_result.metrics
-        max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+    with torch.no_grad():
+        trainer = MultilabelTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset if training_args.do_train else None,
+            eval_dataset=eval_dataset if training_args.do_eval else None,
+            compute_metrics=compute_metrics,
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
         )
-        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+        # Training
+        if training_args.do_train:
+            checkpoint = None
+            if training_args.resume_from_checkpoint is not None:
+                checkpoint = training_args.resume_from_checkpoint
+            elif last_checkpoint is not None:
+                checkpoint = last_checkpoint
+            train_result = trainer.train(resume_from_checkpoint=checkpoint)
+            metrics = train_result.metrics
+            max_train_samples = (
+                data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+            )
+            metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
-        trainer.log_metrics("train", metrics)
-        trainer.save_metrics("train", metrics)
-        trainer.save_state()
+            trainer.save_model()  # Saves the tokenizer too for easy upload
 
-    # Evaluation
-    if training_args.do_eval:
-        logger.info("*** Evaluate ***")
-        metrics = trainer.evaluate(eval_dataset=eval_dataset)
+            trainer.log_metrics("train", metrics)
+            trainer.save_metrics("train", metrics)
+            trainer.save_state()
 
-        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+        # Evaluation
+        if training_args.do_eval:
+            logger.info("*** Evaluate ***")
+            metrics = trainer.evaluate(eval_dataset=eval_dataset)
 
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
+            max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+            metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
-    # Prediction
-    if training_args.do_predict:
-        logger.info("*** Predict ***")
-        predictions, labels, metrics = trainer.predict(predict_dataset, metric_key_prefix="predict")
+            trainer.log_metrics("eval", metrics)
+            trainer.save_metrics("eval", metrics)
 
-        max_predict_samples = (
-            data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
-        )
-        metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
+        # Prediction
+        if training_args.do_predict:
+            logger.info("*** Predict ***")
+            predictions, labels, metrics = trainer.predict(predict_dataset, metric_key_prefix="predict")
 
-        trainer.log_metrics("predict", metrics)
-        trainer.save_metrics("predict", metrics)
+            max_predict_samples = (
+                data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
+            )
+            metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
 
-        output_predict_file = os.path.join(training_args.output_dir, "test_predictions.csv")
-        if trainer.is_world_process_zero():
-            with open(output_predict_file, "w") as writer:
-                for index, pred_list in enumerate(predictions[0]):
-                    pred_line = '\t'.join([f'{pred:.5f}' for pred in pred_list])
-                    writer.write(f"{index}\t{pred_line}\n")
+            trainer.log_metrics("predict", metrics)
+            trainer.save_metrics("predict", metrics)
 
-    # Clean up checkpoints
-    checkpoints = [filepath for filepath in glob.glob(f'{training_args.output_dir}/*/') if '/checkpoint' in filepath]
-    for checkpoint in checkpoints:
-        shutil.rmtree(checkpoint)
+            output_predict_file = os.path.join(training_args.output_dir, "test_predictions.csv")
+            if trainer.is_world_process_zero():
+                with open(output_predict_file, "w") as writer:
+                    for index, pred_list in enumerate(predictions[0]):
+                        pred_line = '\t'.join([f'{pred:.5f}' for pred in pred_list])
+                        writer.write(f"{index}\t{pred_line}\n")
+
+        # Clean up checkpoints
+        checkpoints = [filepath for filepath in glob.glob(f'{training_args.output_dir}/*/') if '/checkpoint' in filepath]
+        for checkpoint in checkpoints:
+            shutil.rmtree(checkpoint)
 
 
 if __name__ == "__main__":
